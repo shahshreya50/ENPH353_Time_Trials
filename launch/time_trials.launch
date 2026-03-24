@@ -1,0 +1,8 @@
+<launch>
+  <node pkg="time_trials"
+        type="time_trials.py"
+        name="time_trials" 
+        output="screen">
+  </node>
+
+</launch>
