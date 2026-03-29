@@ -36,4 +36,4 @@ To run them, there use the launch file, e.g. `roslaunch time_trials time_trials.
 
 ### 2. `scripts`
 
-This
+This directory is for helper scripts -- for example, they may automatically set up terminals running multiple nodes.
