@@ -29,7 +29,8 @@ done
 echo -e "\nGazebo is ready!"
 
 # 2. Run the score tracker
-SCORE_TRACKER_CMD="$SETUP_CMD; cd /home/fizzer/ros_ws/src/2025_competition/enph353/enph353_utils/scripts; python3 ./score_tracker.py"
+SCORE_TRACKER_DIR="/home/fizzer/ros_ws/src/2025_competition/enph353/enph353_utils/scripts"
+SCORE_TRACKER_CMD="$SETUP_CMD; cd $SCORE_TRACKER_DIR; roslaunch enph353_utils score_tracker.launch"
 if confirm "Launch score tracker?"; then
     xfce4-terminal -T "SCORE_TRACKER" -e \
     "bash -c '$SCORE_TRACKER_CMD; exec bash'" &
