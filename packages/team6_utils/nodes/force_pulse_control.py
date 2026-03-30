@@ -6,7 +6,12 @@ import sys
 import select
 import termios
 import tty
-from move_relative import respawn_model
+
+from geometry_msgs.msg import Pose, Quaternion, Point
+from copy import copy
+from move_relative import respawn_model, move_model_relative, DEFAULT_WORLD_POSE, DEFAULT_ORIENTATION
+respawn_to = copy(DEFAULT_WORLD_POSE)
+respawn_to.position.z += 1
 
 msg = """
 Control Forces with Keyboard
@@ -108,7 +113,7 @@ def main():
             
             elif key == 'p':
                 wrench = get_default_wrench()
-                respawn_model(MODEL_NAME)
+                move_model_relative(MODEL_NAME, respawn_to)
 
             elif key == 'q':
                 break
