@@ -82,9 +82,3 @@ def move_model_relative(
 
 def respawn_model(model_name: str):
     move_model_relative(model_name, DEFAULT_WORLD_POSE)
-
-if __name__ == "__main__":
-    # rospy.init_node('respawn_robot')
-    robbie_name = 'B1'
-    one_meter_in_front = Pose(Point(0, 0, 1), DEFAULT_ORIENTATION)
-    move_model_relative(robbie_name, one_meter_in_front, ref_model_name='car1')
