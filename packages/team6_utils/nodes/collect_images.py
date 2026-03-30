@@ -150,7 +150,7 @@ if __name__ == '__main__':
     CAMERA_FOV_PAD_DEG = 10
 
     # Robot position wrt. board
-    RADIUS_RANGE = (0.2, 2.0)
+    RADIUS_RANGE = (0.2, 1.2)
     THETA_SPAN = FOV_HORIZ_DEG / 2 - CAMERA_FOV_PAD_DEG
     PHI_SPAN = FOV_VERT_DEG / 2 - CAMERA_FOV_PAD_DEG
     THETA_RANGE_DEG = (-THETA_SPAN, THETA_SPAN)  # Azimuthal angle
