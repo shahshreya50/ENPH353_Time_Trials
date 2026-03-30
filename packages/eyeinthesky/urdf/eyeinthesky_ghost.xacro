@@ -103,4 +103,9 @@
     <gravity>false</gravity>
   </gazebo>
 
+  <!-- Special ghost colour! -->
+  <gazebo reference="chassis">
+    <material>Gazebo/Red</material>
+  </gazebo>
+
 </robot>
