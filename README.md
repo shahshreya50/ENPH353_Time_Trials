@@ -37,3 +37,8 @@ To run them, there use the launch file, e.g. `roslaunch time_trials time_trials.
 ### 2. `scripts`
 
 This directory is for helper scripts -- for example, they may automatically set up terminals running multiple nodes.
+
+### 3. `data`
+
+This is for training data for models. Data may not be pushed; this is also the output for
+data generation scripts like `collect_images.py`.
