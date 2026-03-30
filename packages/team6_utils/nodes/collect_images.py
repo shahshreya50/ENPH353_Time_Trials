@@ -154,7 +154,8 @@ if __name__ == '__main__':
     THETA_SPAN = FOV_HORIZ_DEG / 2 - CAMERA_FOV_PAD_DEG
     PHI_SPAN = FOV_VERT_DEG / 2 - CAMERA_FOV_PAD_DEG
     THETA_RANGE_DEG = (-THETA_SPAN, THETA_SPAN)  # Azimuthal angle
-    PHI_RANGE_DEG = (max(90 - PHI_SPAN, 0), 90 + PHI_SPAN)  # Polar angle, enforce >= 0
+    PHI_RANGE_DEG = (90 - PHI_SPAN, 90)  # Polar angle, enforce <= 90
+    # PHI_RANGE_DEG = (90, 90)  # Polar angle, enforce >= 0
     THETA_OFFSET = 90 * DEG_TO_RAD # IDK why this is needed
 
     # Robot orientation wrt facing board.
