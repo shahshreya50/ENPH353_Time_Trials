@@ -134,7 +134,7 @@ if __name__ == '__main__':
     #         DEFINE CONSTANTS
     # ==================================
 
-    NUM_IMAGES = 1000
+    NUM_IMAGES = 100
     CLUE_BOARD_MODEL_NAMES = [f"car{x}" for x in range(8)] # car0 - car7
     ROBOT_MODEL_NAME = 'B1'
     CAMERA_TOPIC = "/B1/rrbot/camera1/image_raw"
@@ -147,22 +147,24 @@ if __name__ == '__main__':
 
     # The clue board center must be at most this many degrees
     # from the edge of the camera view
-    CAMERA_FOV_PAD_DEG = 10
+    CAMERA_FOV_PAD_DEG = 30
+    # (-H_SPAN, H_SPAN) and (-V_SPAN, V_SPAN) define a bounding box
+    # for horizontal, vertical angles such that the object is within
+    # CAMERA_FOV_PAD_DEG degrees of the edge of the frame
+    H_SPAN = FOV_HORIZ_DEG / 2 - CAMERA_FOV_PAD_DEG
+    V_SPAN = FOV_VERT_DEG / 2 - CAMERA_FOV_PAD_DEG
 
     # Robot position wrt. board
-    RADIUS_RANGE = (0.2, 1.2)
-    THETA_SPAN = FOV_HORIZ_DEG / 2 - CAMERA_FOV_PAD_DEG
-    PHI_SPAN = FOV_VERT_DEG / 2 - CAMERA_FOV_PAD_DEG
-    THETA_RANGE_DEG = (-THETA_SPAN, THETA_SPAN)  # Azimuthal angle
-    PHI_RANGE_DEG = (90 - PHI_SPAN, 90)  # Polar angle, enforce <= 90
-    # PHI_RANGE_DEG = (90, 90)  # Polar angle, enforce >= 0
+    RADIUS_RANGE = (0.4, 1.2)
+    
+    THETA_RANGE_DEG = (-30, 30)  # Azimuthal angle
+    PHI_RANGE_DEG = (65, 90)  # Polar angle, enforce <= 90
     THETA_OFFSET = 90 * DEG_TO_RAD # IDK why this is needed
 
     # Robot orientation wrt facing board.
-    PITCH_RANGE_DEG = (0, 0)
-    ROLL_RANGE_DEG = (0, 0)
-    YAW_RANGE_DEG = (0, 0)
-    YAW_OFFSET = 0 # IDK why this is needed
+    ROLL_RANGE_DEG = (-5, 5)
+    PITCH_RANGE_DEG = (-H_SPAN, H_SPAN)
+    YAW_RANGE_DEG = (V_SPAN, V_SPAN)
 
     # ==================================
     #           SET UP OUTPUT
@@ -231,7 +233,7 @@ if __name__ == '__main__':
             *tr.quaternion_from_euler(
                 roll_rel,
                 pitch_rel,
-                yaw_rel + YAW_OFFSET,
+                yaw_rel,
                 'rxyz'
             )
         )
@@ -252,14 +254,14 @@ if __name__ == '__main__':
         file_name = f"image_{i}.png"
         file_path = out_dir / file_name
         try:
-            # save_camera_view(bridge, file_path, CAMERA_TOPIC)
+            save_camera_view(bridge, file_path, CAMERA_TOPIC)
             logger.info(f"Saved camera view to {out_dir_name}/{file_name}!")
         except Exception as e:  
             logger.warning("save_camera_view failed!")
             logger.warning(e)
 
         # Comment this out to skip sleep 
-        time.sleep(1)
+        # time.sleep(1)
 
     logger.info(f"Image collection complete! Collected {NUM_IMAGES} images.")
     logger.info(f"Results are in: {out_dir}")
