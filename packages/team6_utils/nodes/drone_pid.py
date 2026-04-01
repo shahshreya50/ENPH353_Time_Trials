@@ -85,7 +85,7 @@ class DronePID:
             msg.force.x = float(force[0])
             msg.force.y = float(force[1])
             msg.force.z = 0.0
-            print("Force cmd (x,y):", msg.force.x, msg.force.y)
+            # print("Force cmd (x,y):", msg.force.x, msg.force.y)
             self._force_pub.publish(msg)
 
         except Exception as e:
