@@ -188,8 +188,10 @@ if __name__ == "__main__":
     # Cancel gravity
     ctrl.zero_force(with_offset=True)
 
-    # Move 1 unit in the z direction
+    # Move drone up and towards the center of the map
     ctrl.increase_position((-3, -3, 1))
+
+    rospy.sleep(2)
 
     moves = [
         (1, 0, 0),
@@ -202,4 +204,4 @@ if __name__ == "__main__":
 
     while True:
         for move in moves:
-            ctrl.increase_position(move)
+            ctrl.increase_position(move, impulse_duration=0.01, travel_duration=0.05)
