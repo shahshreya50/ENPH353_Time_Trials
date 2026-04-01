@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 from geometry_msgs.msg import Wrench
-from drone_controller import DroneController
-from cross_correlation_node import CrossCorrelationNode
 from move_relative import respawn_model, move_model_relative, DEFAULT_ORIENTATION, DEFAULT_WORLD_POSE
 import rospy
 import time

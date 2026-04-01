@@ -17,7 +17,7 @@ import cv2
 DEFAULT_QUEUE_SIZE = 10
 
 
-class DroneController:
+class DronePID:
     def __init__(
         self,
         xcorr_topic: str = "/B1/rrbot/camera_down/image_xcorr",
@@ -28,7 +28,7 @@ class DroneController:
         kd: float = 0.01,
     ):
         self._queue_size = queue_size
-        rospy.init_node('drone_controller', anonymous=True)
+        rospy.init_node('drone_pid', anonymous=True)
 
         self._bridge = CvBridge()
 
@@ -115,5 +115,5 @@ class DroneController:
 
 
 if __name__ == "__main__":
-    node = DroneController()
+    node = DronePID()
     node.run()

@@ -7,8 +7,8 @@
   </node>
 
   <node pkg="team6_utils"
-        type="drone_controller.py"
-        name="drone_controller" 
+        type="drone_pid.py"
+        name="drone_pid" 
         output="screen">
   </node>
 
