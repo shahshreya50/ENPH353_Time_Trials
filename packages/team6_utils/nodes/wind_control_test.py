@@ -26,7 +26,7 @@ upper_pose.position.z += 1
 scale = 10
 
 def send_control(cmd_wrench: Wrench):
-    print("CMD Wrench (x,y):", cmd_wrench.force.x, cmd_wrench.force.y)
+    # print("CMD Wrench (x,y):", cmd_wrench.force.x, cmd_wrench.force.y)
     new_wrench = Wrench()
     new_wrench.force.x = -cmd_wrench.force.x * scale
     new_wrench.force.y = cmd_wrench.force.y * scale
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     Requires cross_correlation_node and drone_controller_node to be running
     """
 
-    rospy.init_node('drone_test')
+    rospy.init_node('wind_control_test')
     
     force_pub = rospy.Publisher("B1/cmd_force", Wrench, queue_size=10)
 

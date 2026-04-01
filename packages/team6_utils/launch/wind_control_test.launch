@@ -1,0 +1,21 @@
+<launch>
+
+  <node pkg="team6_utils"
+        type="cross_correlation_node.py"
+        name="cross_correlation_node" 
+        output="screen">
+  </node>
+
+  <node pkg="team6_utils"
+        type="drone_controller.py"
+        name="drone_controller" 
+        output="screen">
+  </node>
+
+    <node pkg="team6_utils"
+        type="wind_control_test.py"
+        name="wind_control_test" 
+        output="screen">
+  </node>
+
+</launch>

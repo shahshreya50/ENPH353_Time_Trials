@@ -30,11 +30,13 @@ class CrossCorrelationNode:
         self._xcorr_pub = rospy.Publisher(self._xcorr_topic, Image, queue_size=1)  # queue_size=1: always publish latest
 
         if debug_mode:
-            self._debug_topic = "/B1/rrbot/camera_down/image_xcorr_debug"
-            self._debug_pub = rospy.Publisher(self._debug_topic, Image, queue_size=1)
+            debug_topic = "/B1/rrbot/camera_down/image_xcorr_debug"
+            self._debug_pub = rospy.Publisher(debug_topic, Image, queue_size=1)
+            debug_raw_topic = "/B1/rrbot/camera_down/image_raw_debug"
+            self._debug_raw_pub = rospy.Publisher(debug_raw_topic, Image, queue_size=1)
         else:
-            self._debug_topic = None
             self._debug_pub = None
+            self._debug_raw_pub = None
 
         self._bridge = CvBridge()
         self.reference_img: np.ndarray = None
@@ -95,8 +97,16 @@ class CrossCorrelationNode:
 
         _, _, _, peak = cv2.minMaxLoc(xcorr_img_normalized)
         vis = cv2.cvtColor(xcorr_img_normalized, cv2.COLOR_GRAY2BGR)
-        cv2.circle(vis, center=peak, radius=20, color=(0, 0, 255), thickness=2)
-        self._debug_pub.publish(self._bridge.cv2_to_imgmsg(vis, encoding="bgr8"))
+        cv2.circle(vis, center=peak, radius=20, color=(255, 0, 0), thickness=2)
+        self._debug_pub.publish(self._bridge.cv2_to_imgmsg(vis, encoding="rgb8"))
+
+        # Draw peak location onto the original raw image
+        raw_vis = self._bridge.imgmsg_to_cv2(img, desired_encoding="passthrough")
+        raw_vis = cv2.normalize(raw_vis, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        if raw_vis.ndim == 2:
+            raw_vis = cv2.cvtColor(raw_vis, cv2.COLOR_GRAY2BGR)
+        cv2.circle(raw_vis, center=peak, radius=20, color=(255, 0, 0), thickness=2)
+        self._debug_raw_pub.publish(self._bridge.cv2_to_imgmsg(raw_vis, encoding="rgb8"))
 
     def update_reference_img(self, request):
         with self._lock:
