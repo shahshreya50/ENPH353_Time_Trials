@@ -13,7 +13,6 @@ def update_setpoint():
     except rospy.ServiceException as e:
         rospy.logerr(f"Service call failed: {e}")
 
-
 drone_mass = 20.22
 gravity = 9.8
 gravity_force = drone_mass * gravity
@@ -45,12 +44,19 @@ if __name__ == "__main__":
     
     force_pub = rospy.Publisher("B1/cmd_force", Wrench, queue_size=10)
 
+    # Loop to 'wake up' the cmd_force topic
+    t0 = time.time()
+    while time.time() - t0 < 1:
+        wrench = Wrench()
+        force_pub.publish(wrench)
+
     wrench = Wrench()
     wrench.force.z = gravity_force
     force_pub.publish(wrench)
 
     move_model_relative('B1', upper_pose)
-    time.sleep(0.5)  # tune this to your sim
+
+    time.sleep(0.5)
     update_setpoint()
 
     cmd_sub = rospy.Subscriber("/B1/drone_controller/cmd", Wrench, send_control, queue_size=10)
