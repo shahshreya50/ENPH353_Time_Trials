@@ -28,12 +28,13 @@ class ForceController:
     def __init__(
             self,
             model_mass: float,
+            model_moment_of_inertia_z: float,
             force_offsets: tuple = None,
             default_impulse_duration: float = None,
-            default_travel_duration: float = None
         ):
 
         self.mass = model_mass
+        self.i_zz = model_moment_of_inertia_z
 
         if force_offsets is None:
             self.force_offsets = (0, 0, 0)
@@ -41,14 +42,13 @@ class ForceController:
             self.force_offsets = force_offsets
 
         self.default_impulse_duration = default_impulse_duration if default_impulse_duration else 0.1
-        self.default_travel_duration = default_travel_duration if default_travel_duration else 0.1
 
-        self._pub = rospy.Publisher('/B1/cmd_force', Wrench, queue_size=1)
+        self._pub = rospy.Publisher('/B1/cmd_force', Wrench, queue_size=10)
         
         # Wait for subscriber to connect
-        rospy.sleep(0.5)
-
-        self.zero_force()
+        # Note 2026-04-03: This sleep is very important for consistency
+        # With 0.5 seconds, a nonzero velocity may be imparted.
+        rospy.sleep(1)
     
     def send_wrench(self, with_offset=True) -> None:
         """
@@ -118,35 +118,83 @@ class ForceController:
         force: np.ndarray = self.mass / duration * delta_v
         self.apply_force_pulse(force, duration)
 
-    def increase_position(self, delta_pos: Collection, impulse_duration: float = None, travel_duration: float = None) -> None:
+    def increase_position(self, delta_pos: Collection, impulse_duration: float = None) -> None:
         """
         Use knowledge of the model mass to create a pair of opposite impulses which impart a known change to position
 
         Does not account for initial velocity of model: if this takes 1s and v0 is 1m/s, it will travel an additional meter.
 
         x2 - x1 = (1/2 * a1 * t1^2) + (v2 * t2) + (v2 * t3 - 1/2 * |a3| t3^2)
-        x2 - x1 = 1/2 * a * impulse_duration**2 + (a * impulse_duration) * travel_duration + ((a * impulse_duration) * impulse_duration - 1/2 * a * impulse_duration**2)
+        x2 - x1 = 1/2 * a * impulse_duration**2 + ((a * impulse_duration) * impulse_duration - 1/2 * a * impulse_duration**2)
         where a = F/m.
 
-        delta_x = a * (1/2 * impulse_duration**2 + impulse_duration*travel_duration + impulse_duration**2 - 1/2 * impulse_duration**2)
-                = a * (impulse_duration**2 + impulse_duration*travel_duration)
+        delta_x = a * (1/2 * impulse_duration**2 impulse_duration**2 - 1/2 * impulse_duration**2)
+                = a * (impulse_duration**2)
 
-        F = m * (delta_x / (impulse_duration**2 + impulse_duration*travel_duration))
+        F = m * (delta_x / (impulse_duration**2))
         """
         if not isinstance(delta_pos, np.ndarray):
             delta_pos = np.array([xi for xi in delta_pos])
         
         if impulse_duration is None:
             impulse_duration = self.default_impulse_duration
-        
-        if travel_duration is None:
-            travel_duration = self.default_travel_duration
 
-        force: np.ndarray = self.mass / (impulse_duration ** 2 + impulse_duration * travel_duration) * delta_pos
+        force: np.ndarray = self.mass / (impulse_duration ** 2) * delta_pos
 
         self.apply_force_pulse(force, impulse_duration)
-        rospy.sleep(travel_duration)
         self.apply_force_pulse(-force, impulse_duration)
+
+    def apply_torque_pulse(self, torque: Collection, duration: float = None) -> None:
+        """
+        Apply a torque with magnitude and direction `(torque[0], torque[1], torque[2])`
+        for `duration` seconds. Does not apply force.
+        """
+        if not isinstance(torque, np.ndarray):
+            torque = np.array([ti for ti in torque])
+
+        if duration is None:
+            duration = self.default_impulse_duration
+
+        self.apply_torque(*torque)
+        rospy.sleep(duration)
+        self.zero_force()
+
+    def increase_angular_velocity(self, delta_omega: Collection, duration: float = None) -> None:
+        """
+        Use knowledge of the model moment of inertia to create an impulse which imparts a known change to angular velocity
+
+        T = I * domega/dt
+        for const T,
+        T*t = I*delta_omega
+        T = (I/t)*delta_omega
+        """
+        if not isinstance(delta_omega, np.ndarray):
+            delta_omega = np.array([wi for wi in delta_omega])
+
+        if duration is None:
+            duration = self.default_impulse_duration
+
+        torque: np.ndarray = self.i_zz / duration * delta_omega
+        self.apply_torque_pulse(torque, duration)
+
+    def increase_angle(self, delta_angle: Collection, impulse_duration: float = None) -> None:
+        """
+        Use knowledge of the model moment of inertia to create a pair of opposite torque impulses which impart a known change to azimuthal angle.
+
+        Analogous to increase_position. Assumes zero initial angular velocity.
+
+        torque = I * (delta_angle / (impulse_duration**2))
+        """
+        if not isinstance(delta_angle, np.ndarray):
+            delta_angle = np.array([ai for ai in delta_angle])
+
+        if impulse_duration is None:
+            impulse_duration = self.default_impulse_duration
+
+        torque: np.ndarray = self.i_zz / (impulse_duration ** 2) * delta_angle
+
+        self.apply_torque_pulse(torque, impulse_duration)
+        self.apply_torque_pulse(-torque, impulse_duration)
 
 
 if __name__ == "__main__":
@@ -175,7 +223,6 @@ if __name__ == "__main__":
         model_mass,
         force_offsets=(0, 0, model_mass * a_gravity),
         default_impulse_duration=0.1,
-        default_travel_duration=0.1
     )
 
     # 1. Respawn the model at the start with zero force applied
@@ -203,4 +250,4 @@ if __name__ == "__main__":
 
     while True:
         for move in moves:
-            ctrl.increase_position(move, impulse_duration=0.01, travel_duration=0.05)
+            ctrl.increase_position(move, impulse_duration=0.01)
