@@ -155,7 +155,6 @@ if __name__ == "__main__":
 
     from gazebo_msgs.srv import GetModelState, SetModelState
     from gazebo_msgs.msg import ModelState
-    from geometry_msgs.msg import Pose, Quaternion, Point
     from move_relative import respawn_model
 
     def get_model_state(model_name: str) -> ModelState:
