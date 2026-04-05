@@ -1,61 +1,71 @@
 #!/usr/bin/env python3
-
 import rospy
 import numpy as np
 from controller import ForceController
 from move_relative import respawn_model
 
 
-DEG_TO_RAD = np.pi / 180
+# e.g. 'car0' -> (x, y, z, phi)
+# assumes drone is in starting position
+MODEL_POSITIONS: dict = {
+    'B1_spawnpos': np.array([5.5, 2.5, 0.2, -1.5707963267948968]),
+    'B1_grounded': np.array([5.500004840037357, 2.4999946488568625, 0.06429105580640433, -1.5700318536518063]),
+    'car0': np.array([5.81, 1.64, 0.04, 0.0]),
+    'car1': np.array([5.16, -1.35, 0.04, 0.0]),
+    'car2': np.array([4.0, -1.67, 0.04, -1.57]),
+    'car3': np.array([0.83, -0.54, 0.04, 3.1399999999999753]),
+    'car4': np.array([0.83, 1.5, 0.04, 0.0]),
+    'car5': np.array([-3.41, 1.71, 0.04, -1.57]),
+    'car6': np.array([-3.8, -2.01, 0.04, 1.57]),
+    'car7': np.array([-0.9, -1.2, 1.86, 1.57]),
+}
 
-def run_course(ctrl: ForceController):
-    # 1. Respawn the model at the start with zero force applied
-    respawn_model('B1')
-    ctrl.zero_force(with_offset=False)
+# Angles phi depend on where the normal vector of is on the model
+# For clue boards: normal vector is on the left when facing the sign
+# For the drone: normal vector is forward at spawn
 
-    # rospy.sleep(2) # Let drone fall the ground
 
-    # Cancel gravity
-    ctrl.zero_force(with_offset=True)
+def get_offset(angle_rads: float, distance: float = 0.3):
+    """
+    Determine the displacement from a sign
+    to where the drone should view it from
+    """
+    return np.array([
+        distance * np.cos(angle_rads),
+        distance * np.sin(angle_rads)
+    ])
 
-    rospy.sleep(0.5)
 
-    # x, y, z, theta
-    moves = [
-        # car4
-        (0, 0, 1, 0),
-        (-4.8, 0, 0, 0),
-        (0, 0, -1, 0),
-        (0, -0.7, 0, 0),
+def fly_to_carx(x: int,
+                ctrl: ForceController,
+                drone_pos: np.ndarray = None,
+                vertical_clearance: float = 1.0,
+                end_height_above: float = 0.1):
 
-        # car5
-        (0, 0.7, 0, 0),
-        (0, 0, 0, -np.pi/2),
-        (-3.7, 0, 0, 0),
-        (0, -0.7, 0, 0),
+    if drone_pos is None:
+        # Default: spawn point
+        drone_pos: np.ndarray = MODEL_POSITIONS['B1_spawnpos']            
 
-        # car7
-        (0, 0, 1.8, 0),
-        (0, -3, 0, 0),
-        (0, 0, 0, np.pi),
-        (1.8, 0, 0, 0),
+    car_name = f"car{x}"
+    car_pos: np.ndarray = MODEL_POSITIONS[car_name]
+    
+    # Fix the car theta so that 0 deg means the text faces +x
+    car_pos += np.array([0, 0, 0, np.pi/2])
 
-        # car6
-        (0, -0.8, 0, 0),
-        (-2.8, 0, 0, 0),
-        (0, 0, -1.9, 0),
-    ]
+    # We want to align the rear of the drone with the normal of the sign face
+    drone_rear_theta = drone_pos[3] + np.pi
 
-    for move in moves:
+    delta_pos = car_pos - drone_pos
+    delta_xy = delta_pos[:2]
+    delta_z = delta_pos[2]
+    delta_phi = car_pos[3] - drone_rear_theta
 
-        linear = move[:3] if move[:3] != (0, 0, 0) else None
-        phi_z = move[3] if move[3] != 0 else None
+    xy_offset = get_offset(car_pos[3])
 
-        if linear is not None:
-            ctrl.increase_position(linear)
-        if phi_z is not None:
-            ctrl.increase_angle((0, 0, phi_z))
-        rospy.sleep(0.2)
+    ctrl.increase_position((0, 0, delta_z + vertical_clearance))
+    ctrl.increase_position((*(delta_xy + xy_offset), 0))
+    ctrl.increase_position((0, 0, -vertical_clearance + end_height_above))
+    ctrl.increase_angle((0, 0, delta_phi))
 
 
 if __name__ == "__main__":
@@ -64,17 +74,41 @@ if __name__ == "__main__":
 
     rospy.init_node('test_force_controller')
 
-    model_mass = 20.00
-    model_izz = 0.1
-    a_gravity = 9.8
+    MODEL_MASS = 20.00
+    MODEL_I_ZZ = 0.1
+    A_GRAVITY = 9.8
     ctrl = ForceController(
-        model_mass,
-        model_izz,
-        force_offsets=(0, 0, model_mass * a_gravity),
-        default_impulse_duration=0.2,
+        MODEL_MASS,
+        MODEL_I_ZZ,
+        force_offsets=(0, 0, MODEL_MASS * A_GRAVITY),
+        default_impulse_duration=0.5,
     )
 
-    num_runs = 1
-    for i in range(num_runs):
-        run_course(ctrl)    
+    # ==========================================================
+    # Simulate a gazebo reset
+    # ==========================================================
+
+    # Respawn the model at the start with zero force applied
+    # This makes the starting state more realistic because this
+    # node will start a bit after the Gazebo simulation
+    respawn_model('B1')
+    ctrl.zero_force(with_offset=False)
+    rospy.sleep(1)
+
+    # ==========================================================
+    # This is the point from which we assume the node will start
+    # ==========================================================
+
+    # Teleport back up, but this time without gravity
+    ctrl.zero_force(with_offset=True)
+    respawn_model('B1')
+
+    for car_i in range(8):
+
         rospy.sleep(0.5)
+
+        vertical_clearance = 4 if car_i == 6 else 1
+
+        ctrl.zero_force(with_offset=True)
+        respawn_model('B1')
+        fly_to_carx(car_i, ctrl, vertical_clearance=vertical_clearance)
