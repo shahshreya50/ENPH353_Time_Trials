@@ -106,10 +106,10 @@ if __name__ == "__main__":
     while(True):
         for car_i in range(8):
 
-            rospy.sleep(0.5)
+            rospy.sleep(1)
 
             vertical_clearance = 4 if car_i == 6 else 1
 
             respawn_model('B1')
-            rospy.sleep(0.5)
+            rospy.sleep(1)
             fly_to_carx(car_i, ctrl, vertical_clearance=vertical_clearance)
