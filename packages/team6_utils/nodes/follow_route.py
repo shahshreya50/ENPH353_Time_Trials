@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 import rospy
 import numpy as np
+import os
 from controller import ForceController
 from move_relative import respawn_model
+from cv_bridge import CvBridge
+from pathlib import Path
+from datetime import datetime
+from sensor_msgs.msg import Image
 
+
+# from save_image import ImageSaver
+import cv2
 
 # e.g. 'car0' -> (x, y, z, phi)
 # assumes drone is in starting position
@@ -25,7 +33,7 @@ MODEL_POSITIONS: dict = {
 # For the drone: normal vector is forward at spawn
 
 
-def get_offset(angle_rads: float, distance: float = 0.3):
+def get_offset(angle_rads: float, distance: float = 0.4):
     """
     Determine the displacement from a sign
     to where the drone should view it from
@@ -67,6 +75,50 @@ def fly_to_carx(x: int,
     ctrl.increase_angle((0, 0, delta_phi))
     ctrl.increase_position((0, 0, -vertical_clearance + end_height_above))
 
+def wait_for_fresh_message(topic, topic_type, timeout=None):
+    """
+    Helper to ensure we get a message published AFTER this call.
+    """
+    start_time = rospy.Time.now()
+    container = {'msg': None}
+
+    def callback(msg):
+        # Image messages have headers; we check if the frame is actually new
+        if msg.header.stamp > start_time:
+            container['msg'] = msg
+
+    sub = rospy.Subscriber(topic, topic_type, callback)
+    
+    deadline = None
+    if timeout:
+        duration = timeout if isinstance(timeout, rospy.Duration) else rospy.Duration(timeout)
+        deadline = start_time + duration
+
+    try:
+        while not rospy.is_shutdown() and container['msg'] is None:
+            if deadline and rospy.Time.now() > deadline:
+                raise rospy.ROSException(f"Timeout exceeded waiting for fresh image on {topic}")
+            rospy.sleep(0.01)
+        return container['msg']
+    finally:
+        sub.unregister()
+
+def save_camera_view(bridge: CvBridge, save_path: Path, topic: str) -> None:
+    """
+    Saves a fresh picture from a ros topic to a file.
+    Blocks until a new message arrives.
+    """
+    # Receive & convert ONLY a fresh image message
+    # Optional: add a timeout (e.g., 5 seconds) so it doesn't block forever if the camera dies
+    msg = wait_for_fresh_message(topic, Image, timeout=5.0)
+    
+    if msg is not None:
+        cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
+        # Save the image
+        cv2.imwrite(str(save_path), cv_image)
+    else:
+        rospy.logerr("Failed to capture fresh image.")
+
 
 if __name__ == "__main__":
 
@@ -83,6 +135,21 @@ if __name__ == "__main__":
         force_offsets=(0, 0, MODEL_MASS * A_GRAVITY),
         default_impulse_duration=0.02,
     )
+
+    bridge = CvBridge()
+
+    root: Path = Path(__file__).parent.parent.parent.parent
+    data_dir: Path = root / 'data'
+
+    timestamp = datetime.now().strftime(r"%d_%m_%Y_%H_%M_%S")
+    out_dir_name = "run_outputs_" + timestamp
+    out_dir: Path = data_dir / out_dir_name
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    # img_saver: ImageSaver = ImageSaver(
+    #     '/B1/rrbot/camera1/image_raw', out_dir, num_discards=0
+    # )
 
     # ==========================================================
     # Simulate a gazebo reset
@@ -103,13 +170,23 @@ if __name__ == "__main__":
     ctrl.zero_force(with_offset=True)
     respawn_model('B1')
 
-    while(True):
-        for car_i in range(8):
+    for car_i in range(8):        
 
-            rospy.sleep(1)
+        # Add extra clearance for hill
+        vertical_clearance = 4 if car_i == 6 else 1
 
-            vertical_clearance = 4 if car_i == 6 else 1
+        respawn_model('B1')
 
-            respawn_model('B1')
-            rospy.sleep(1)
-            fly_to_carx(car_i, ctrl, vertical_clearance=vertical_clearance)
+        rospy.sleep(1) # IMPORTANT - Wait for respawn_model to finish!
+
+        fly_to_carx(car_i, ctrl, vertical_clearance=vertical_clearance)
+
+        # Save the new image! (blocking)
+        # img_saver.save_image_blocking()
+        save_camera_view(
+            bridge,
+            out_dir / f'image_car{car_i}.png',
+            'B1/rrbot/camera1/image_raw'
+        )
+    
+    respawn_model('B1')
