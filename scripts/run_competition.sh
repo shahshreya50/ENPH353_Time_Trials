@@ -1,6 +1,6 @@
 #!/bin/bash
 SOURCE_CMD="source ~/ros_ws/devel/setup.bash"
-ENTER_DIR="cd ~/ros_ws/src"
+ENTER_DIR="cd /home/fizzer/ros_ws/src/2025_competition/enph353/enph353_utils/scripts"
 SETUP_CMD="$SOURCE_CMD;$ENTER_DIR"
 
 # 1. Launch Gazebo in a new xfce4-terminal window
@@ -14,10 +14,15 @@ until rostopic list 2>/dev/null | grep -q "/clock"; do
 done
 echo -e "\nGazebo is ready!"
 
+# Wait for generation of clues.csv
+sleep 5
+
 # 2. Run the score tracker
-SCORE_TRACKER_DIR="/home/fizzer/ros_ws/src/2025_competition/enph353/enph353_utils/scripts"
-SCORE_TRACKER_CMD="$SETUP_CMD; cd $SCORE_TRACKER_DIR; python3 score_tracker.py"
+SCORE_TRACKER_CMD="$SETUP_CMD; python3 score_tracker.py"
 xfce4-terminal -T "SCORE_TRACKER" --minimize -e \ "bash -c '$SCORE_TRACKER_CMD; exec bash'" &
+
+# Wait for score tracker
+sleep 5
 
 # 3. Run the competition controller node
 xfce4-terminal -T "COMP_CONTROLLER" --minimize -e \ "bash -c '$SETUP_CMD; roslaunch team6_utils competition.launch; exec bash'" &
