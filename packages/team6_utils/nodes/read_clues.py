@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from cv_bridge import CvBridge
+from pathlib import Path
 import time
 
 #define constants
@@ -213,7 +214,8 @@ def read_clueboard(cv_image):
 
 print("Instantiating interpreter...")
 #setup tensorflow
-interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/time_trials/packages/team6_utils/nodes/conv_model_1.tflite")
+model_path = Path(__file__).parent / 'conv_model_1.tflite'
+interpreter = tf.lite.Interpreter(model_path=str(model_path))
 
 # Allocate tensors (necessary to prepare the interpreter for inference)
 interpreter.allocate_tensors()

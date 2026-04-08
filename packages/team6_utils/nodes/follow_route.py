@@ -155,10 +155,15 @@ if __name__ == "__main__":
 
     rospy.init_node('follow_route')
 
+    #start publishers
+    pub_clueboards = rospy.Publisher('/clueboard_images', Image, queue_size=8)
+    pub_score = rospy.Publisher('/score_tracker', String, queue_size=1)
+
     MODEL_MASS = 20.00
     MODEL_I_ZZ = 0.1
     A_GRAVITY = 9.8
     GOTO_TUNNEL = True
+    
     ctrl = ForceController(
         MODEL_MASS,
         MODEL_I_ZZ,
@@ -199,10 +204,7 @@ if __name__ == "__main__":
         rospy.sleep(1)
         ctrl.zero_force(with_offset=True)
 
-    #start publishers
-    pub_clueboards = rospy.Publisher('/clueboard_images', Image, queue_size=8)
-    pub_score = rospy.Publisher('/score_tracker', String, queue_size=1)
-    rate = rospy.Rate(2)
+    
     pub_score.publish('Team6,abcde,0,START')
 
 
@@ -226,8 +228,6 @@ if __name__ == "__main__":
 
         pub_clueboards.publish(msg)
 
-    pub_score.publish('Team6,abcde,-1,END')
-    
-    respawn_model('B1')
-    ctrl.zero_force(with_offset=False)
+    ctrl.increase_velocity((0, 0, 100)) # Send the robot to heaven
+
     rospy.spin()
