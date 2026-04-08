@@ -81,4 +81,19 @@ def move_model_relative(
         rospy.logerr(f"Service call failed: {e}")
 
 def respawn_model(model_name: str):
-    move_model_relative(model_name, DEFAULT_WORLD_POSE)
+    """
+    Moves move_model_name to DEFAULT_WORLD_POSE relative to the world frame
+    """
+    rospy.wait_for_service('/gazebo/set_model_state')
+    try:
+        new_state = ModelState()
+        new_state.model_name = model_name
+        new_state.pose = DEFAULT_WORLD_POSE
+        new_state.reference_frame = "world"
+
+        # Apply the movement in Gazebo
+        set_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
+        set_state(new_state)
+        
+    except rospy.ServiceException as e:
+        rospy.logerr(f"Service call failed: {e}")
