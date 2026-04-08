@@ -1,0 +1,9 @@
+<launch>
+
+  <node pkg="team6_utils"
+        type="follow_route.py"
+        name="follow_route" 
+        output="screen">
+  </node>
+
+</launch>
