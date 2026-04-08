@@ -168,7 +168,7 @@ if __name__ == '__main__':
     YAW_RANGE_DEG = (V_SPAN, V_SPAN)
 
     # Clueboard information
-    PATH_TO_CLUES_CSV = '/home/fizzer/ros_ws/src/2025_competition/enph353/enph353_gazebo/scripts/clues.csv'
+    PATH_TO_CLUES_CSV = '/home/fizzer/ros_ws/src/2025_competition/enph353/enph353_gazebo/scripts/plates.csv'
     clue_list = []
     with open(PATH_TO_CLUES_CSV, mode='r') as file:
         reader = csv.reader(file)

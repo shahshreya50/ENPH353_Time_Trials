@@ -9,6 +9,7 @@ from cv_bridge import CvBridge
 from pathlib import Path
 from datetime import datetime
 from sensor_msgs.msg import Image, Imu
+from std_msgs.msg import String
 import cv2
 
 # e.g. 'car0' -> (x, y, z, phi)
@@ -200,6 +201,13 @@ if __name__ == "__main__":
     liftoff(ctrl, z_increase=0.1)
     rospy.sleep(10)
 
+    #start publishers
+    pub_clueboards = rospy.Publisher('/clueboard_images', Image, queue_size=8)
+    pub_score = rospy.Publisher('/score_tracker', String, queue_size=1)
+    rate = rospy.Rate(2)
+    pub_score.publish('Team6,abcde,0,START')
+
+
     for car_i in range(8):        
 
         # Add extra clearance for hill
@@ -211,10 +219,15 @@ if __name__ == "__main__":
 
         fly_to_carx(car_i, ctrl, vertical_clearance=vertical_clearance)
 
-        save_camera_view(
+        msg = save_camera_view(
             bridge,
             out_dir / f'image_car{car_i}.png',
             'B1/rrbot/camera1/image_raw'
         )
+        msg.header.frame_id = "{i}"
+
+        pub_clueboards.publish(msg)
+
+    pub_score.publish('Team6,abcde,-1,END')
     
     respawn_model('B1')
