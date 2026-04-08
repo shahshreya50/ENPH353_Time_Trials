@@ -20,21 +20,17 @@ Ensure `rospraram get /use_sim_time` is set to true, so rospy sleep works in sim
 
 
 class ForceController:
-    """
-    Drone force controller with force pulse and velocity pulse methods
-
-    This is not its own node, so rospy.init_node() must be called elsewhere.
-    """
     def __init__(
             self,
             model_mass: float,
-            model_moment_of_inertia_z: float,
+            inertia_vector: tuple, # (Ixx, Iyy, Izz)
             force_offsets: tuple = None,
             default_impulse_duration: float = None,
         ):
 
         self.mass = model_mass
-        self.i_zz = model_moment_of_inertia_z
+        # Store inertia as a numpy array for easy vector math
+        self.inertia = np.array(inertia_vector)
 
         if force_offsets is None:
             self.force_offsets = (0, 0, 0)
@@ -42,9 +38,8 @@ class ForceController:
             self.force_offsets = force_offsets
 
         self.default_impulse_duration = default_impulse_duration if default_impulse_duration else 0.1
-
         self._pub = rospy.Publisher('/B1/cmd_force', Wrench, queue_size=10)
-        
+
         # Wait for subscriber to connect
         # Note 2026-04-03: This sleep is very important for consistency
         # With 0.5 seconds, a nonzero velocity may be imparted.
@@ -160,38 +155,25 @@ class ForceController:
         self.zero_force()
 
     def increase_angular_velocity(self, delta_omega: Collection, duration: float = None) -> None:
-        """
-        Use knowledge of the model moment of inertia to create an impulse which imparts a known change to angular velocity
-
-        T = I * domega/dt
-        for const T,
-        T*t = I*delta_omega
-        T = (I/t)*delta_omega
-        """
         if not isinstance(delta_omega, np.ndarray):
             delta_omega = np.array([wi for wi in delta_omega])
 
         if duration is None:
             duration = self.default_impulse_duration
 
-        torque: np.ndarray = self.i_zz / duration * delta_omega
+        # T = (I / t) * delta_omega (Element-wise multiplication)
+        torque = (self.inertia / duration) * delta_omega
         self.apply_torque_pulse(torque, duration)
 
     def increase_angle(self, delta_angle: Collection, impulse_duration: float = None) -> None:
-        """
-        Use knowledge of the model moment of inertia to create a pair of opposite torque impulses which impart a known change to azimuthal angle.
-
-        Analogous to increase_position. Assumes zero initial angular velocity.
-
-        torque = I * (delta_angle / (impulse_duration**2))
-        """
         if not isinstance(delta_angle, np.ndarray):
             delta_angle = np.array([ai for ai in delta_angle])
 
         if impulse_duration is None:
             impulse_duration = self.default_impulse_duration
 
-        torque: np.ndarray = self.i_zz / (impulse_duration ** 2) * delta_angle
+        # torque = I * (delta_angle / (impulse_duration**2))
+        torque = self.inertia * (delta_angle / (impulse_duration ** 2))
 
         self.apply_torque_pulse(torque, impulse_duration)
         self.apply_torque_pulse(-torque, impulse_duration)
@@ -201,7 +183,7 @@ if __name__ == "__main__":
 
     # Disable wind to run this test! This can be done in the Gazebo GUI under B1 > chassis
 
-    from gazebo_msgs.srv import GetModelState, SetModelState
+    from gazebo_msgs.srv import GetModelState
     from gazebo_msgs.msg import ModelState
     from move_relative import respawn_model
 

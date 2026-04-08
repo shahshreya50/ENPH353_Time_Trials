@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 import rospy
 import numpy as np
+import math
 import os
 from controller import ForceController
 from move_relative import respawn_model
 from cv_bridge import CvBridge
 from pathlib import Path
 from datetime import datetime
-from sensor_msgs.msg import Image
-
-
-# from save_image import ImageSaver
+from sensor_msgs.msg import Image, Imu
 import cv2
 
 # e.g. 'car0' -> (x, y, z, phi)
@@ -32,7 +30,6 @@ MODEL_POSITIONS: dict = {
 # For clue boards: normal vector is on the left when facing the sign
 # For the drone: normal vector is forward at spawn
 
-
 def get_offset(angle_rads: float, distance: float = 0.4):
     """
     Determine the displacement from a sign
@@ -42,7 +39,6 @@ def get_offset(angle_rads: float, distance: float = 0.4):
         distance * np.cos(angle_rads),
         distance * np.sin(angle_rads)
     ])
-
 
 def fly_to_carx(x: int,
                 ctrl: ForceController,
@@ -108,23 +104,60 @@ def save_camera_view(bridge: CvBridge, save_path: Path, topic: str) -> None:
     Saves a fresh picture from a ros topic to a file.
     Blocks until a new message arrives.
     """
-    # Receive & convert ONLY a fresh image message
-    # Optional: add a timeout (e.g., 5 seconds) so it doesn't block forever if the camera dies
     msg = wait_for_fresh_message(topic, Image, timeout=5.0)
     
     if msg is not None:
         cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
-        # Save the image
         cv2.imwrite(str(save_path), cv_image)
     else:
         rospy.logerr("Failed to capture fresh image.")
 
 
+def get_euler_from_quaternion(q):
+    """Returns (roll, pitch, yaw)"""
+    sinr_cosp = 2 * (q.w * q.x + q.y * q.z)
+    cosr_cosp = 1 - 2 * (q.x * q.x + q.y * q.y)
+    roll = math.atan2(sinr_cosp, cosr_cosp)
+
+    sinp = 2 * (q.w * q.y - q.z * q.x)
+    pitch = math.asin(sinp) if abs(sinp) < 1 else math.copysign(math.pi/2, sinp)
+
+    siny_cosp = 2 * (q.w * q.z + q.x * q.y)
+    cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
+    yaw = math.atan2(siny_cosp, cosy_cosp)
+    
+    return roll, pitch, yaw
+
+def liftoff(ctrl: ForceController, z_increase: float = 1.0):
+    # 1. Enable gravity compensation and move up
+    ctrl.zero_force(with_offset=True)
+    ctrl.increase_position((0, 0, z_increase))
+    
+    # 2. Get state from IMU
+    msg = wait_for_fresh_message('/B1/imu/data', Imu, timeout=2.0)
+    if not msg: return
+
+    # 3. Cancel all angular velocities (Roll, Pitch, Yaw)
+    # This prevents the drone from drifting while we calculate the angle fix
+    omega = np.array([msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z])
+    ctrl.increase_angular_velocity(-omega)
+
+    # 4. Correct Orientation
+    # Refresh message to get the state after the velocity stop
+    msg = wait_for_fresh_message('/B1/imu/data', Imu, timeout=1.0)
+    r, p, y = get_euler_from_quaternion(msg.orientation)
+    
+    target_yaw = -math.pi / 2.0
+    dy = math.atan2(math.sin(target_yaw - y), math.cos(target_yaw - y))
+    
+    # Apply pulses to bring roll/pitch to 0 and yaw to target
+    # We use -r and -p because we want to subtract the current tilt
+    ctrl.increase_angle((-r, -p, dy))
+
+
 if __name__ == "__main__":
 
-    # Disable wind to run this test! This can be done in the Gazebo GUI under B1 > chassis
-
-    rospy.init_node('test_force_controller')
+    rospy.init_node('follow_route')
 
     MODEL_MASS = 20.00
     MODEL_I_ZZ = 0.1
@@ -147,17 +180,10 @@ if __name__ == "__main__":
 
     os.makedirs(out_dir, exist_ok=True)
 
-    # img_saver: ImageSaver = ImageSaver(
-    #     '/B1/rrbot/camera1/image_raw', out_dir, num_discards=0
-    # )
-
     # ==========================================================
     # Simulate a gazebo reset
     # ==========================================================
 
-    # Respawn the model at the start with zero force applied
-    # This makes the starting state more realistic because this
-    # node will start a bit after the Gazebo simulation
     respawn_model('B1')
     ctrl.zero_force(with_offset=False)
     rospy.sleep(2)
@@ -167,8 +193,12 @@ if __name__ == "__main__":
     # ==========================================================
 
     # Teleport back up, but this time without gravity
-    ctrl.zero_force(with_offset=True)
-    respawn_model('B1')
+    # ctrl.zero_force(with_offset=True)
+    # respawn_model('B1')
+
+    # Example integration of liftoff (optional)
+    liftoff(ctrl, z_increase=0.1)
+    rospy.sleep(10)
 
     for car_i in range(8):        
 
@@ -181,8 +211,6 @@ if __name__ == "__main__":
 
         fly_to_carx(car_i, ctrl, vertical_clearance=vertical_clearance)
 
-        # Save the new image! (blocking)
-        # img_saver.save_image_blocking()
         save_camera_view(
             bridge,
             out_dir / f'image_car{car_i}.png',
