@@ -3,19 +3,23 @@
 <xacro:property name="camera_width" value="0.02"/>
 <xacro:property name="camera_length" value="0.02"/>
 <xacro:property name="camera_height" value="0.01"/>
-<xacro:property name="camera_mass" value="0.01"/>
 <xacro:property name="chassis_height" value="0.05"/>
-<xacro:property name="chassis_mass" value="20"/>
 <xacro:property name="chassis_radius" value="0.1"/>
 <xacro:property name="leg_radius"  value="0.005"/>
 <xacro:property name="leg_length"  value="0.04"/>
-<xacro:property name="leg_mass"    value="0.05"/>
 <xacro:property name="down_cam_radius" value="0.01"/>
 <xacro:property name="down_cam_height" value="0.005"/>
-<xacro:property name="down_cam_mass"   value="0.01"/>
+<xacro:property name="range_size" value="0.01"/>
+
+<xacro:property name="camera_mass" value="0.01"/>
+<xacro:property name="down_cam_mass" value="0.01"/>
+<xacro:property name="leg_mass" value="0.01"/>
+<xacro:property name="range_mass" value="0.01"/>
+<xacro:property name="chassis_mass" value="19.91"/>
+
+
 <xacro:include filename="$(find robbie)/urdf/macros.xacro"/>
 
-<!-- Body -->
 <link name='chassis'>
   <xacro:cylinder_inertial name="chassis" m="${chassis_mass}" r="${chassis_radius}" h="${chassis_height}"/>
   <collision name='chassis_collision'>
@@ -31,7 +35,6 @@
   </visual>
 </link>
 
-<!-- Force Controller -->
 <gazebo>
   <plugin name="chassis" filename="libgazebo_ros_force.so">
     <bodyName>chassis</bodyName>
@@ -42,7 +45,17 @@
   <enable_wind>true</enable_wind>
 </gazebo>
 
-<!-- Forward Camera -->
+<gazebo>
+  <plugin name="imu_plugin" filename="libgazebo_ros_imu.so">
+    <alwaysOn>true</alwaysOn>
+    <bodyName>chassis</bodyName>
+    <topicName>imu/data</topicName>
+    <serviceName>imu/service</serviceName>
+    <gaussianNoise>0.0</gaussianNoise>
+    <updateRate>100.0</updateRate>
+  </plugin>
+</gazebo>
+
 <link name='camera_link'>
   <xacro:box_inertial name="camera_link" m="${camera_mass}" x="${camera_width}" y="${camera_length}" z="${camera_height}"/>
   <collision name='camera_link_collision'>
@@ -99,7 +112,6 @@
   </sensor>
 </gazebo>
 
-<!-- Downward Camera -->
 <link name='camera_down_link'>
   <xacro:cylinder_inertial name="camera_down_link" m="${down_cam_mass}" r="${down_cam_radius}" h="${down_cam_height}"/>
   <collision name='camera_down_link_collision'>
@@ -126,8 +138,7 @@
   <sensor type="camera" name="camera_down">
     <update_rate>30.0</update_rate>
     <camera name="head">
-      <horizontal_fov>2.094395</horizontal_fov> <!--120 deg-->
-      <image>
+      <horizontal_fov>2.094395</horizontal_fov> <image>
         <width>800</width>
         <height>800</height>
         <format>R8G8B8</format>
@@ -159,10 +170,73 @@
   </sensor>
 </gazebo>
 
-<!-- Legs -->
+<xacro:macro name="range_sensor" params="name *origin">
+  <link name="${name}_link">
+    <xacro:box_inertial name="${name}_link" m="${range_mass}" x="${range_size}" y="${range_size}" z="${range_size}"/>
+    <collision name="${name}_collision">
+      <geometry>
+        <box size="${range_size} ${range_size} ${range_size}"/>
+      </geometry>
+    </collision>
+    <visual name="${name}_visual">
+      <geometry>
+        <box size="${range_size} ${range_size} ${range_size}"/>
+      </geometry>
+    </visual>
+  </link>
 
-<!-- Legs drop below chassis by leg_length*cos(tilt), camera needs clearance of down_cam_height -->
-<!-- leg_length=0.04 gives ~0.038m clearance at 20deg tilt, comfortably > down_cam_height=0.005m -->
+  <joint name="${name}_joint" type="fixed">
+    <parent link="chassis"/>
+    <child link="${name}_link"/>
+    <xacro:insert_block name="origin" />
+  </joint>
+
+  <gazebo reference="${name}_link">
+    <sensor type="ray" name="${name}_sensor">
+      <pose>0 0 0 0 0 0</pose>
+      <visualize>true</visualize>
+      <update_rate>50</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>10</samples>
+            <resolution>1</resolution>
+            <min_angle>-0.1</min_angle>
+            <max_angle>0.1</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.05</min>
+          <max>10.0</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
+      <plugin filename="libgazebo_ros_range.so" name="${name}_plugin">
+        <gaussianNoise>0.005</gaussianNoise>
+        <alwaysOn>true</alwaysOn>
+        <updateRate>50</updateRate>
+        <topicName>range/${name}</topicName>
+        <frameName>${name}_link</frameName>
+        <radiation>INFRARED</radiation>
+        <fov>0.2</fov>
+      </plugin>
+    </sensor>
+    <material>Gazebo/Yellow</material>
+  </gazebo>
+</xacro:macro>
+
+<xacro:range_sensor name="range_left">
+  <origin xyz="0 ${chassis_radius} ${chassis_height/2 - camera_height/2 - 0.0001}" rpy="0 0 ${pi/2}"/>
+</xacro:range_sensor>
+
+<xacro:range_sensor name="range_backward">
+  <origin xyz="${-chassis_radius} 0 ${chassis_height/2 - camera_height/2 - 0.0001}" rpy="0 0 ${pi}"/>
+</xacro:range_sensor>
+
+<xacro:range_sensor name="range_down">
+  <origin xyz="${chassis_radius/2} 0 ${-(chassis_height/2) - (range_size/2)}" rpy="0 ${pi/2} 0"/>
+</xacro:range_sensor>
+
 
 <xacro:macro name="landing_leg" params="name angle">
   <link name="leg_${name}">
@@ -179,12 +253,6 @@
       </geometry>
     </visual>
   </link>
-  <!--
-    Place leg at chassis edge (chassis_radius - leg_radius) in XY, at the bottom face in Z.
-    rpy tilts the leg outward by 20deg around the axis tangent to the chassis edge,
-    so the foot splays out for stability while the top stays at the chassis rim.
-    The leg link origin is at its center, so offset by half leg_length downward.
-  -->
   <joint name="leg_${name}_joint" type="fixed">
     <parent link="chassis"/>
     <child link="leg_${name}"/>
@@ -200,7 +268,6 @@
 <xacro:landing_leg name="back"   angle="180"/>
 <xacro:landing_leg name="right"  angle="270"/>
 
-<!-- Colours! -->
 <gazebo reference="camera_link">
   <material>Gazebo/Purple</material>
 </gazebo>

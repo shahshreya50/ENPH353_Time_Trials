@@ -4,6 +4,8 @@ Authors: Shreya Shah & Jonah Lee
 
 ## Quick Start
 
+### Environment Setup
+
 This project contains packages meant for use in conjunction with the Gazebo/ROS environment at
 https://github.com/ENPH353/2025_competition.
 
@@ -16,9 +18,31 @@ cd ~/ros_ws
 catkin_make
 ```
 
+### Running the Competition
+
 To run the competition code, a helper script is provided: `run_time_trials.sh`. This will both start the main Gazebo world using `2025_competition/enph353/enph353_utils/scripts/run_sim.sh` and start the `score_tracker` node from the `enph353_utils` package using `roslaunch`.
 
 **Note**: The score_tracker node can only be launched from the `/2025_competition/enph353/enph353_utils/scripts` directory because it assumes this location when searching for the required `.ui` file.
+
+In addition, two changes are required to add the custom drone:
+
+1. Change the selected robot from Robbie to Eyeinthesky (`robots.launch`, lines 15-24)
+
+```xml
+<!-- Launch eyeinthesky -->
+<group ns="B1">
+<param name="tf_prefix" value="B1_tf" />
+<include file="$(find eyeinthesky)/launch/eyeinthesky.launch">
+    <arg name="init_pose" value="-x 5.5 -y 2.5 -z 0.2 -R 0.0 -P 0.0 -Y -1.57" />
+    <arg name="robot_name"  value="B1" />
+</include>
+```
+
+2. Change the wind scaling to 1% (`353.world`, line 586)
+
+```xml
+<force_approximation_scaling_factor>0.01</force_approximation_scaling_factor>
+```
 
 ## Project Structure
 
