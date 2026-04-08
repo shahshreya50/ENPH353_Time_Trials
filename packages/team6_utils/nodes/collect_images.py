@@ -37,6 +37,7 @@ import rospy
 import time
 import sys
 import os
+import csv
 
 
 def set_up_logging(logger_name, log_dir: Path, log_level=logging.DEBUG) -> logging.Logger:
@@ -82,19 +83,19 @@ def set_up_logging(logger_name, log_dir: Path, log_level=logging.DEBUG) -> loggi
 
     return logger
 
-def save_camera_view(bridge: CvBridge, save_path: Path, topic: str) -> None:
+def save_camera_view(bridge: CvBridge, save_path: Path, topic: str, move_time) -> None:
     """
     Saves a the latest picture from a ros topic to a file
 
     Raises an error if `rospy.wait_for_message` fails.
     """
-    
-    # Recieve & convert new image message
-    msg = rospy.wait_for_message(topic, Image)
-    cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
-    
-    # Save the image
-    cv2.imwrite(str(save_path), cv_image)
+    while True:
+        msg = rospy.wait_for_message(topic, Image)
+        # Check if the image timestamp is newer than the teleport command
+        if msg.header.stamp > move_time:
+            cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
+            cv2.imwrite(str(save_path), cv_image)
+            break
 
 
 def get_orientation_to_face(target_pos: Point, seeker_pos: Point) -> Quaternion:
@@ -166,6 +167,17 @@ if __name__ == '__main__':
     PITCH_RANGE_DEG = (-H_SPAN, H_SPAN)
     YAW_RANGE_DEG = (V_SPAN, V_SPAN)
 
+    # Clueboard information
+    PATH_TO_CLUES_CSV = '/home/fizzer/ros_ws/src/2025_competition/enph353/enph353_gazebo/scripts/clues.csv'
+    clue_list = []
+    with open(PATH_TO_CLUES_CSV, mode='r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            # Check if the row is not empty
+            if row:
+                clue_list.append(row[1]) # Column 2
+    
+
     # ==================================
     #           SET UP OUTPUT
     # ==================================
@@ -200,7 +212,9 @@ if __name__ == '__main__':
     for i in range(NUM_IMAGES):
 
         # Choose a random clue board
-        ref_model_name = random.choice(CLUE_BOARD_MODEL_NAMES)
+        board_num = random.randint(0,7)
+        #ref_model_name = random.choice(CLUE_BOARD_MODEL_NAMES)
+        ref_model_name = f"car{board_num}"
         logger.info(f"Selected new reference model: '{ref_model_name}'")
 
         # Select a random theta, phi, r position relative to the clue board
@@ -250,11 +264,15 @@ if __name__ == '__main__':
         # Teleport to the new pose
         move_model_relative(ROBOT_MODEL_NAME, rel_pose, ref_model_name)
 
+        # Get the current ROS time AFTER the move
+        move_time = rospy.get_rostime()
+
         # Save a picture
-        file_name = f"image_{i}.png"
+        current_clue = clue_list[board_num]
+        file_name = f"image_{i}_{board_num}_" + current_clue + ".png"
         file_path = out_dir / file_name
         try:
-            save_camera_view(bridge, file_path, CAMERA_TOPIC)
+            save_camera_view(bridge, file_path, CAMERA_TOPIC, move_time)
             logger.info(f"Saved camera view to {out_dir_name}/{file_name}!")
         except Exception as e:  
             logger.warning("save_camera_view failed!")
