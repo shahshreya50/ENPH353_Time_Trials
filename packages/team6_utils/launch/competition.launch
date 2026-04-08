@@ -1,9 +1,15 @@
 <launch>
 
-  <node pkg="team6_utils"
-        type="follow_route.py"
-        name="follow_route" 
-        output="screen">
-  </node>
+<node pkg="team6_utils"
+      type="follow_route.py"
+      name="follow_route" 
+      output="screen">
+</node>
+
+<node pkg="team6_utils"
+      type="text_extraction.py"
+      name="text_extraction" 
+      output="screen">
+</node>
 
 </launch>
