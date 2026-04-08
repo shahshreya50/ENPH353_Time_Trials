@@ -17,6 +17,7 @@ import cv2
 MODEL_POSITIONS: dict = {
     'B1_spawnpos': np.array([5.5, 2.5, 0.2, -1.5707963267948968]),
     'B1_grounded': np.array([5.500004840037357, 2.4999946488568625, 0.06429105580640433, -1.5700318536518063]),
+    'tunnel': np.array([-3.2, -2.3, 0.3, 0]),
     'car0': np.array([5.81, 1.64, 0.04, 0.0]),
     'car1': np.array([5.16, -1.35, 0.04, 0.0]),
     'car2': np.array([4.0, -1.67, 0.04, -1.57]),
@@ -72,6 +73,25 @@ def fly_to_carx(x: int,
     ctrl.increase_angle((0, 0, delta_phi))
     ctrl.increase_position((0, 0, -vertical_clearance + end_height_above))
 
+def fly_to_tunnel(ctrl: ForceController,
+                  drone_pos: np.ndarray = None,
+                  vertical_clearance: float = 1.0,
+                  end_height_above: float = 0.1):
+
+    if drone_pos is None:
+        # Default: spawn point
+        drone_pos: np.ndarray = MODEL_POSITIONS['B1_grounded']            
+
+    tunnel_pos: np.ndarray = MODEL_POSITIONS['tunnel']
+
+    delta_pos = tunnel_pos - drone_pos
+    delta_xy = delta_pos[:2]
+    delta_z = delta_pos[2]
+
+    ctrl.increase_position((0, 0, delta_z + vertical_clearance))
+    ctrl.increase_position((*(delta_xy), 0))
+    ctrl.increase_position((0, 0, -vertical_clearance + end_height_above))
+
 def wait_for_fresh_message(topic, topic_type, timeout=None):
     """
     Helper to ensure we get a message published AFTER this call.
@@ -100,7 +120,7 @@ def wait_for_fresh_message(topic, topic_type, timeout=None):
     finally:
         sub.unregister()
 
-def save_camera_view(bridge: CvBridge, save_path: Path, topic: str) -> None:
+def save_camera_view(bridge: CvBridge, save_path: Path, topic: str) -> Image:
     """
     Saves a fresh picture from a ros topic to a file.
     Blocks until a new message arrives.
@@ -110,6 +130,7 @@ def save_camera_view(bridge: CvBridge, save_path: Path, topic: str) -> None:
     if msg is not None:
         cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
         cv2.imwrite(str(save_path), cv_image)
+        return msg
     else:
         rospy.logerr("Failed to capture fresh image.")
 
@@ -129,32 +150,6 @@ def get_euler_from_quaternion(q):
     
     return roll, pitch, yaw
 
-def liftoff(ctrl: ForceController, z_increase: float = 1.0):
-    # 1. Enable gravity compensation and move up
-    ctrl.zero_force(with_offset=True)
-    ctrl.increase_position((0, 0, z_increase))
-    
-    # 2. Get state from IMU
-    msg = wait_for_fresh_message('/B1/imu/data', Imu, timeout=2.0)
-    if not msg: return
-
-    # 3. Cancel all angular velocities (Roll, Pitch, Yaw)
-    # This prevents the drone from drifting while we calculate the angle fix
-    omega = np.array([msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z])
-    ctrl.increase_angular_velocity(-omega)
-
-    # 4. Correct Orientation
-    # Refresh message to get the state after the velocity stop
-    msg = wait_for_fresh_message('/B1/imu/data', Imu, timeout=1.0)
-    r, p, y = get_euler_from_quaternion(msg.orientation)
-    
-    target_yaw = -math.pi / 2.0
-    dy = math.atan2(math.sin(target_yaw - y), math.cos(target_yaw - y))
-    
-    # Apply pulses to bring roll/pitch to 0 and yaw to target
-    # We use -r and -p because we want to subtract the current tilt
-    ctrl.increase_angle((-r, -p, dy))
-
 
 if __name__ == "__main__":
 
@@ -163,6 +158,7 @@ if __name__ == "__main__":
     MODEL_MASS = 20.00
     MODEL_I_ZZ = 0.1
     A_GRAVITY = 9.8
+    GOTO_TUNNEL = True
     ctrl = ForceController(
         MODEL_MASS,
         MODEL_I_ZZ,
@@ -194,12 +190,14 @@ if __name__ == "__main__":
     # ==========================================================
 
     # Teleport back up, but this time without gravity
-    # ctrl.zero_force(with_offset=True)
-    # respawn_model('B1')
+    ctrl.zero_force(with_offset=True)
 
-    # Example integration of liftoff (optional)
-    liftoff(ctrl, z_increase=0.1)
-    rospy.sleep(10)
+
+    if GOTO_TUNNEL:
+        fly_to_tunnel(ctrl, end_height_above=1)
+        ctrl.zero_force(with_offset=False) # Fall onto the tunnel
+        rospy.sleep(1)
+        ctrl.zero_force(with_offset=True)
 
     #start publishers
     pub_clueboards = rospy.Publisher('/clueboard_images', Image, queue_size=8)
@@ -224,10 +222,12 @@ if __name__ == "__main__":
             out_dir / f'image_car{car_i}.png',
             'B1/rrbot/camera1/image_raw'
         )
-        msg.header.frame_id = "{i}"
+        msg.header.frame_id = f"{car_i}"
 
         pub_clueboards.publish(msg)
 
     pub_score.publish('Team6,abcde,-1,END')
     
     respawn_model('B1')
+    ctrl.zero_force(with_offset=False)
+    rospy.spin()
