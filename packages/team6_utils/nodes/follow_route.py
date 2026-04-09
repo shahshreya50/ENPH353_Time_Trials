@@ -2,7 +2,9 @@
 import rospy
 import numpy as np
 import math
+import shutil
 import os
+import csv
 from controller import ForceController
 from move_relative import respawn_model
 from cv_bridge import CvBridge
@@ -146,6 +148,21 @@ if __name__ == "__main__":
 
     os.makedirs(out_dir, exist_ok=True)
 
+    # Copy ground truth csv file for data collection
+    src = Path("/home/fizzer/ros_ws/src/2025_competition/enph353/enph353_gazebo/scripts/clues.csv")
+    dst = out_dir / src.name  # keeps the same filename
+    shutil.copy(src, dst)
+
+    # Get the actual value to name the files
+    clues_path = out_dir / 'clues.csv'
+    car_labels = []
+
+    with open(clues_path, mode='r') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            # row[1] is the second column
+            car_labels.append(row[1])
+
     # ==========================================================
     # Simulate a gazebo reset
     # ==========================================================
@@ -182,9 +199,10 @@ if __name__ == "__main__":
 
         fly_to_carx(car_i, ctrl, vertical_clearance=vertical_clearance)
 
+        label = car_labels[car_i]
         msg = save_camera_view(
             bridge,
-            out_dir / f'image_car{car_i}.png',
+            out_dir / f'image_car{car_i}_{label}.png',
             'B1/rrbot/camera1/image_raw'
         )
         msg.header.frame_id = f"{car_i}"
