@@ -207,8 +207,8 @@ if __name__ == "__main__":
     
     pub_score.publish('Team6,abcde,0,START')
 
-
-    for car_i in range(8):        
+    ordered_signs = [7, 0, 1, 2, 3, 4, 5, 6]
+    for car_i in ordered_signs:        
 
         # Add extra clearance for hill
         vertical_clearance = 4 if car_i == 6 else 1
