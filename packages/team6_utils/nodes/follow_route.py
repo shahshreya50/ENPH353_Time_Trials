@@ -8,12 +8,13 @@ from move_relative import respawn_model
 from cv_bridge import CvBridge
 from pathlib import Path
 from datetime import datetime
-from sensor_msgs.msg import Image, Imu
+from sensor_msgs.msg import Image
 from std_msgs.msg import String
 import cv2
+from sign_positioning import VIEW_POSITIONS
+
 
 # e.g. 'car0' -> (x, y, z, phi)
-# assumes drone is in starting position
 MODEL_POSITIONS: dict = {
     'B1_spawnpos': np.array([5.5, 2.5, 0.2, -1.5707963267948968]),
     'B1_grounded': np.array([5.500004840037357, 2.4999946488568625, 0.06429105580640433, -1.5700318536518063]),
@@ -28,50 +29,29 @@ MODEL_POSITIONS: dict = {
     'car7': np.array([-0.9, -1.2, 1.86, 1.57]),
 }
 
-# Angles phi depend on where the normal vector of is on the model
-# For clue boards: normal vector is on the left when facing the sign
-# For the drone: normal vector is forward at spawn
-
-def get_offset(angle_rads: float, distance: float = 0.4):
-    """
-    Determine the displacement from a sign
-    to where the drone should view it from
-    """
-    return np.array([
-        distance * np.cos(angle_rads),
-        distance * np.sin(angle_rads)
-    ])
-
 def fly_to_carx(x: int,
                 ctrl: ForceController,
                 drone_pos: np.ndarray = None,
-                vertical_clearance: float = 1.0,
-                end_height_above: float = 0.1):
+                vertical_clearance: float = 1.0):
 
     if drone_pos is None:
         # Default: spawn point
-        drone_pos: np.ndarray = MODEL_POSITIONS['B1_spawnpos']            
+        drone_pos: np.ndarray = MODEL_POSITIONS['B1_spawnpos']
 
     car_name = f"car{x}"
 
     # Fix the car theta so that 0 deg means the text faces +x
-    car_pos: np.ndarray = MODEL_POSITIONS[car_name] + np.array([0, 0, 0, np.pi/2])
-    
+    end_pos: np.ndarray = VIEW_POSITIONS[car_name]
 
-    # We want to align the rear of the drone with the normal of the sign face
-    drone_rear_theta = drone_pos[3] + np.pi
-
-    delta_pos = car_pos - drone_pos
-    delta_xy = delta_pos[:2]
+    delta_pos = end_pos - drone_pos
     delta_z = delta_pos[2]
-    delta_phi = car_pos[3] - drone_rear_theta
-
-    xy_offset = get_offset(car_pos[3])
+    delta_xy = delta_pos[:2]
+    delta_phi = delta_pos[3]
 
     ctrl.increase_position((0, 0, delta_z + vertical_clearance))
-    ctrl.increase_position((*(delta_xy + xy_offset), 0))
+    ctrl.increase_position((*delta_xy, 0))
     ctrl.increase_angle((0, 0, delta_phi))
-    ctrl.increase_position((0, 0, -vertical_clearance + end_height_above))
+    ctrl.increase_position((0, 0, -vertical_clearance))
 
 def fly_to_tunnel(ctrl: ForceController,
                   drone_pos: np.ndarray = None,
@@ -170,9 +150,9 @@ if __name__ == "__main__":
     # Simulate a gazebo reset
     # ==========================================================
 
-    # respawn_model('B1')
-    # ctrl.zero_force(with_offset=False)
-    # rospy.sleep(2)
+    respawn_model('B1')
+    ctrl.zero_force(with_offset=False)
+    rospy.sleep(2)
 
     # ==========================================================
     # This is the point from which we assume the node will start
