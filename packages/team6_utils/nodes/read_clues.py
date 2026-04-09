@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from cv_bridge import CvBridge
+from pathlib import Path
 import time
 
 #define constants
@@ -20,10 +21,15 @@ uh = 130
 us = 255
 uv = 255
 lh = 110
-ls = 50
+ls = 120
 lv = 50
+lvr = 30
 lower_hsv = np.array([lh,ls,lv])
 upper_hsv = np.array([uh,us,uv])
+lower_hsv_rl = np.array([0, ls, lv])
+upper_hsv_rl = np.array([30, us, uv])
+lower_hsv_rh = np.array([330, ls, lv])
+upper_hsv_rh = np.array([360, us, uv])
 characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 
@@ -122,7 +128,7 @@ def extract_clue(frame):
   # plt.imshow(warped_colour)
   # plt.show()
 
-  clue_colour = warped_colour[200:, :]
+  clue_colour = warped_colour[200:-5, 5:-5]
 
   clue_hsv = cv2.cvtColor(clue_colour, cv2.COLOR_BGR2HSV)
 
@@ -209,11 +215,111 @@ def read_clueboard(cv_image):
         clue_ans.append(read_letter(let_img))
     
     return ''.join(clue_ans)
+
+
+def extract_clue8(frame):
+  height, width = frame.shape[:2]
+
+  # Threshold the HSV image to get only blue colors
+  frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+  mask_blue = cv2.inRange(frame_hsv, lower_hsv, upper_hsv)
+
+  mask_low_red = cv2.inRange(frame_hsv, lower_hsv_rl, upper_hsv_rl)
+  # mask_high_red = cv2.inRange(frame_hsv, lower_hsv_rh, upper_hsv_rh)
+  # plt.imshow(mask_high_red)
+  # plt.show()
+  mask = cv2.bitwise_or(mask_blue, mask_low_red)
+
+  inverted_mask = cv2.bitwise_not(mask)
+
+  num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(inverted_mask)
+  good_labels = []
+  for i in range(1, num_labels):
+          x, y, w, h, area = stats[i, :5]
+
+          if width*height/1000 < area:
+              y1, y2 = max(0, y), min(height, y+h)
+              x1, x2 = max(0, x), min(width, x+w)
+
+              if area < width*height/2:
+                  good_labels.append((i,area))
+  
+  if len(good_labels) == 0:
+      return None
+  good_labels.sort(key=lambda x: x[1], reverse=True)
+
+  component_mask = np.uint8(labels == good_labels[0][0]) * 255
+
+  #Find 4 corners of clueboard
+  contours, _ = cv2.findContours(component_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+  if contours:
+      cnt = contours[0]
+      approx = cv2.approxPolyN(cnt, 4, -1)
+  
+  src_pts = approx.reshape(4, 2).astype(np.float32)
+
+  #From Gemini with some modification:
+  # Important: You may need to sort these points to ensure they match dst_pts
+  # A common trick is to sum/diff coordinates to find corners
+  s = src_pts.sum(axis=1)
+  diff = np.diff(src_pts, axis=1)
+
+  ordered_src = np.zeros((4, 2), dtype="float32")
+  ordered_src[0] = src_pts[np.argmin(s)]     # Top-left (min sum)
+  ordered_src[2] = src_pts[np.argmax(s)]     # Bottom-right (max sum)
+  ordered_src[1] = src_pts[np.argmin(diff)]  # Top-right (min difference)
+  ordered_src[3] = src_pts[np.argmax(diff)]  # Bottom-left (max difference)
+
+  dest_w = 272*2
+  dest_h = 180*2
+  dst_pts = np.float32([
+      [0, 0],
+      [dest_w, 0],
+      [dest_w, dest_h],
+      [0, dest_h]
+  ])
+
+  #apply homography to clueboard
+
+  M = cv2.getPerspectiveTransform(ordered_src, dst_pts)
+  warped_colour = cv2.warpPerspective(frame, M, (dest_w, dest_h))
+  # plt.imshow(warped_colour)
+  # plt.show()
+
+  clue_colour = warped_colour[200:-5, 5:-5]
+
+  clue_hsv = cv2.cvtColor(clue_colour, cv2.COLOR_BGR2HSV)
+
+  # Threshold the HSV image to get only blue colors
+  clue_mask = cv2.inRange(clue_hsv, lower_hsv, upper_hsv)
+
+  # plt.imshow(clue_mask)
+  # plt.show()
+
+  return clue_mask
+  
+
+def read_clueboard_8(cv_image):
+    clue_img = extract_clue8(cv_image)
+    if clue_img is None:
+        return ""
+    clue_letters_img = extract_letters(clue_img)
+
+    clue_ans = []
+
+    for let_img in clue_letters_img:
+        clue_ans.append(read_letter(let_img))
     
+    return ''.join(clue_ans)
+
+
+
 
 print("Instantiating interpreter...")
 #setup tensorflow
-interpreter = tf.lite.Interpreter(model_path="/home/fizzer/ros_ws/src/time_trials/packages/team6_utils/nodes/conv_model_1.tflite")
+model_path = Path(__file__).parent / 'conv_model_FE_retrain.tflite'
+interpreter = tf.lite.Interpreter(model_path=str(model_path))
 
 # Allocate tensors (necessary to prepare the interpreter for inference)
 interpreter.allocate_tensors()
@@ -227,43 +333,36 @@ print("Interpreter ready for inference")
 
 
 if __name__ == '__main__':
-    #define constants and instantiate relevant objects
-    topic = "/B1/rrbot/camera1/image_raw"
-    bridge = CvBridge()
-    rospy.init_node('read_clues', anonymous=True)
+    test_img_path = "/home/fizzer/ros_ws/src/team6/data/run_outputs_09_04_2026_00_06_56/image_car7.png"
     
-    print("Starting clue interpretation")
-    while True:
-        print("Waiting for image")
-        msg = rospy.wait_for_message(topic, Image,)
-        cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
-        print("Image recieved")
-        plt.imshow(cv_image)
-        plt.show()
+    # 1. Initialize CvBridge
+    bridge = CvBridge()
 
-        start = time.perf_counter()
+    # 2. Load the image using OpenCV
+    cv_img = cv2.imread(test_img_path)
 
-        clue_img = extract_clue(cv_image)
-        if clue_img is None:
-            continue
-        clue_letters_img = extract_letters(clue_img)
+    if cv_img is None:
+        print(f"Error: Could not load image at {test_img_path}")
+    else:
+        try:
+            # 3. Simulate converting CV2 image to ROS Image message
+            ros_image_msg = bridge.cv2_to_imgmsg(cv_img, "bgr8")
+            print("Successfully simulated ROS Image message.")
 
-        clue_ans = []
+            # 4. Convert it back to CV2 format (as your read_clueboard function expects a CV array)
+            # This mimics how your subscriber callback would receive and process the data
+            input_frame = bridge.imgmsg_to_cv2(ros_image_msg, "bgr8")
 
-        for let_img in clue_letters_img:
-            print("yay")
+            # 5. Run the detection pipeline
+            start_time = time.time()
+            clue_text = read_clueboard_8(input_frame)
+            end_time = time.time()
 
-            input_tensor = np.expand_dims(let_img, axis=(0,-1)).astype(np.float32)
-            interpreter.set_tensor(input_details[0]['index'], input_tensor)
-            interpreter.invoke()
-            output_data = interpreter.get_tensor(output_details[0]['index'])
-            clue_ans.append(one_hot_to_char(output_data[0]))
-        
-        end = time.perf_counter()
-        print(f"Elapsed time: {end - start:.6f} seconds")
+            # 6. Output results
+            print("-" * 30)
+            print(f"Detected Clue: {clue_text}")
+            print(f"Inference time: {end_time - start_time:.4f} seconds")
+            print("-" * 30)
 
-        print(''.join(clue_ans))
-        time.sleep(10)
-
-        
-
+        except Exception as e:
+            print(f"An error occurred during processing: {e}")
