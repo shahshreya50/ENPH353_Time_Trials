@@ -18,7 +18,11 @@ def callback(msg):
     index = int(msg.header.frame_id) + 1
     print(f"Reading image {index}")
     cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
-    clue = read_clues.read_clueboard(cv_image)
+
+    if (index == 8):
+        clue = read_clues.read_clueboard_8(cv_image)
+    else:
+        clue = read_clues.read_clueboard(cv_image)
     pub_score.publish(f"Team6,abcde,{index},{clue}")
     print("Success")
 
