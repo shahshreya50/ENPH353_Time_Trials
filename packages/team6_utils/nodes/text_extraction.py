@@ -22,7 +22,7 @@ def callback(msg):
     pub_score.publish(f"Team6,abcde,{index},{clue}")
     print("Success")
 
-    if index >= 8:
+    if index == 7: # We do car7 (index 8) first and end with car6 (index 7)
         rospy.sleep(0.1)
         pub_score.publish('Team6,abcde,-1,END')
 
