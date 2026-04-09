@@ -20,9 +20,11 @@ import time
 uh = 130
 us = 255
 uv = 255
-lh = 110
+lh = 120
 ls = 50
 lv = 50
+lower_hsv_rl = np.array([0, ls, lv])
+upper_hsv_rl = np.array([30, us, uv])
 lower_hsv = np.array([lh,ls,lv])
 upper_hsv = np.array([uh,us,uv])
 characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -210,7 +212,106 @@ def read_clueboard(cv_image):
         clue_ans.append(read_letter(let_img))
     
     return ''.join(clue_ans)
+
+
+def extract_clue8(frame):
+  height, width = frame.shape[:2]
+
+  # Threshold the HSV image to get only blue colors
+  frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+  mask_blue = cv2.inRange(frame_hsv, lower_hsv, upper_hsv)
+
+  mask_low_red = cv2.inRange(frame_hsv, lower_hsv_rl, upper_hsv_rl)
+  # mask_high_red = cv2.inRange(frame_hsv, lower_hsv_rh, upper_hsv_rh)
+  # plt.imshow(mask_high_red)
+  # plt.show()
+  mask = cv2.bitwise_or(mask_blue, mask_low_red)
+
+  inverted_mask = cv2.bitwise_not(mask)
+
+  num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(inverted_mask)
+  good_labels = []
+  for i in range(1, num_labels):
+          x, y, w, h, area = stats[i, :5]
+
+          if width*height/1000 < area:
+              y1, y2 = max(0, y), min(height, y+h)
+              x1, x2 = max(0, x), min(width, x+w)
+
+              if area < width*height/2:
+                  good_labels.append((i,area))
+  
+  if len(good_labels) == 0:
+      return None
+  good_labels.sort(key=lambda x: x[1], reverse=True)
+
+  component_mask = np.uint8(labels == good_labels[0][0]) * 255
+
+  #Find 4 corners of clueboard
+  contours, _ = cv2.findContours(component_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+  if contours:
+      cnt = contours[0]
+      approx = cv2.approxPolyN(cnt, 4, -1)
+  
+  src_pts = approx.reshape(4, 2).astype(np.float32)
+
+  #From Gemini with some modification:
+  # Important: You may need to sort these points to ensure they match dst_pts
+  # A common trick is to sum/diff coordinates to find corners
+  s = src_pts.sum(axis=1)
+  diff = np.diff(src_pts, axis=1)
+
+  ordered_src = np.zeros((4, 2), dtype="float32")
+  ordered_src[0] = src_pts[np.argmin(s)]     # Top-left (min sum)
+  ordered_src[2] = src_pts[np.argmax(s)]     # Bottom-right (max sum)
+  ordered_src[1] = src_pts[np.argmin(diff)]  # Top-right (min difference)
+  ordered_src[3] = src_pts[np.argmax(diff)]  # Bottom-left (max difference)
+
+  dest_w = 272*2
+  dest_h = 180*2
+  dst_pts = np.float32([
+      [0, 0],
+      [dest_w, 0],
+      [dest_w, dest_h],
+      [0, dest_h]
+  ])
+
+  #apply homography to clueboard
+
+  M = cv2.getPerspectiveTransform(ordered_src, dst_pts)
+  warped_colour = cv2.warpPerspective(frame, M, (dest_w, dest_h))
+  # plt.imshow(warped_colour)
+  # plt.show()
+
+  clue_colour = warped_colour[200:, :]
+
+  clue_hsv = cv2.cvtColor(clue_colour, cv2.COLOR_BGR2HSV)
+
+  # Threshold the HSV image to get only blue colors
+  clue_mask = cv2.inRange(clue_hsv, lower_hsv, upper_hsv)
+
+  # plt.imshow(clue_mask)
+  # plt.show()
+
+  return clue_mask
+  
+
+def read_clueboard_8(cv_image):
+    clue_img = extract_clue8(cv_image)
+    if clue_img is None:
+        return ""
+    clue_letters_img = extract_letters(clue_img)
+
+    clue_ans = []
+
+    for let_img in clue_letters_img:
+        clue_ans.append(read_letter(let_img))
     
+    return ''.join(clue_ans)
+
+
+
 
 print("Instantiating interpreter...")
 #setup tensorflow
