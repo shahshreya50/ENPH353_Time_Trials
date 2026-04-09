@@ -135,22 +135,6 @@ def save_camera_view(bridge: CvBridge, save_path: Path, topic: str) -> Image:
         rospy.logerr("Failed to capture fresh image.")
 
 
-def get_euler_from_quaternion(q):
-    """Returns (roll, pitch, yaw)"""
-    sinr_cosp = 2 * (q.w * q.x + q.y * q.z)
-    cosr_cosp = 1 - 2 * (q.x * q.x + q.y * q.y)
-    roll = math.atan2(sinr_cosp, cosr_cosp)
-
-    sinp = 2 * (q.w * q.y - q.z * q.x)
-    pitch = math.asin(sinp) if abs(sinp) < 1 else math.copysign(math.pi/2, sinp)
-
-    siny_cosp = 2 * (q.w * q.z + q.x * q.y)
-    cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
-    yaw = math.atan2(siny_cosp, cosy_cosp)
-    
-    return roll, pitch, yaw
-
-
 if __name__ == "__main__":
 
     rospy.init_node('follow_route')
@@ -186,17 +170,18 @@ if __name__ == "__main__":
     # Simulate a gazebo reset
     # ==========================================================
 
-    respawn_model('B1')
-    ctrl.zero_force(with_offset=False)
-    rospy.sleep(2)
+    # respawn_model('B1')
+    # ctrl.zero_force(with_offset=False)
+    # rospy.sleep(2)
 
     # ==========================================================
     # This is the point from which we assume the node will start
     # ==========================================================
 
-    # Teleport back up, but this time without gravity
-    ctrl.zero_force(with_offset=True)
+    pub_score.publish('Team6,abcde,0,START')
 
+    # Cancel gravity
+    ctrl.zero_force(with_offset=True)
 
     if GOTO_TUNNEL:
         fly_to_tunnel(ctrl, end_height_above=1)
@@ -204,8 +189,6 @@ if __name__ == "__main__":
         rospy.sleep(1)
         ctrl.zero_force(with_offset=True)
 
-    
-    pub_score.publish('Team6,abcde,0,START')
 
     ordered_signs = [7, 0, 1, 2, 3, 4, 5, 6]
     for car_i in ordered_signs:        
