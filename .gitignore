@@ -218,3 +218,4 @@ __marimo__/
 
 # Training images
 data/**/image_*.png
+data/**/*.csv
