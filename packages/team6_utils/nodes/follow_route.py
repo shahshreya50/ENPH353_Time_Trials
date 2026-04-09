@@ -150,9 +150,9 @@ if __name__ == "__main__":
     # Simulate a gazebo reset
     # ==========================================================
 
-    respawn_model('B1')
-    ctrl.zero_force(with_offset=False)
-    rospy.sleep(2)
+    # respawn_model('B1')
+    # ctrl.zero_force(with_offset=False)
+    # rospy.sleep(2)
 
     # ==========================================================
     # This is the point from which we assume the node will start
@@ -194,3 +194,5 @@ if __name__ == "__main__":
     ctrl.increase_velocity((0, 0, 100)) # Send the robot to heaven
 
     rospy.spin()
+
+    # Score tracker END is called in text_extraction.py
