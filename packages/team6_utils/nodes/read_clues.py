@@ -128,7 +128,7 @@ def extract_clue(frame):
   # plt.imshow(warped_colour)
   # plt.show()
 
-  clue_colour = warped_colour[200:, :]
+  clue_colour = warped_colour[200:-5, 5:-5]
 
   clue_hsv = cv2.cvtColor(clue_colour, cv2.COLOR_BGR2HSV)
 
@@ -287,7 +287,7 @@ def extract_clue8(frame):
   # plt.imshow(warped_colour)
   # plt.show()
 
-  clue_colour = warped_colour[200:, :]
+  clue_colour = warped_colour[200:-5, 5:-5]
 
   clue_hsv = cv2.cvtColor(clue_colour, cv2.COLOR_BGR2HSV)
 
@@ -318,7 +318,7 @@ def read_clueboard_8(cv_image):
 
 print("Instantiating interpreter...")
 #setup tensorflow
-model_path = Path(__file__).parent / 'conv_model_1.tflite'
+model_path = Path(__file__).parent / 'conv_model_FE_retrain.tflite'
 interpreter = tf.lite.Interpreter(model_path=str(model_path))
 
 # Allocate tensors (necessary to prepare the interpreter for inference)
