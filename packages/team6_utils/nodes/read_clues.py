@@ -20,13 +20,16 @@ import time
 uh = 130
 us = 255
 uv = 255
-lh = 120
-ls = 50
+lh = 110
+ls = 120
 lv = 50
-lower_hsv_rl = np.array([0, ls, lv])
-upper_hsv_rl = np.array([30, us, uv])
+lvr = 30
 lower_hsv = np.array([lh,ls,lv])
 upper_hsv = np.array([uh,us,uv])
+lower_hsv_rl = np.array([0, ls, lv])
+upper_hsv_rl = np.array([30, us, uv])
+lower_hsv_rh = np.array([330, ls, lv])
+upper_hsv_rh = np.array([360, us, uv])
 characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 
@@ -330,43 +333,36 @@ print("Interpreter ready for inference")
 
 
 if __name__ == '__main__':
-    #define constants and instantiate relevant objects
-    topic = "/B1/rrbot/camera1/image_raw"
-    bridge = CvBridge()
-    rospy.init_node('read_clues', anonymous=True)
+    test_img_path = "/home/fizzer/ros_ws/src/team6/data/run_outputs_09_04_2026_00_06_56/image_car7.png"
     
-    print("Starting clue interpretation")
-    while True:
-        print("Waiting for image")
-        msg = rospy.wait_for_message(topic, Image,)
-        cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
-        print("Image recieved")
-        plt.imshow(cv_image)
-        plt.show()
+    # 1. Initialize CvBridge
+    bridge = CvBridge()
 
-        start = time.perf_counter()
+    # 2. Load the image using OpenCV
+    cv_img = cv2.imread(test_img_path)
 
-        clue_img = extract_clue(cv_image)
-        if clue_img is None:
-            continue
-        clue_letters_img = extract_letters(clue_img)
+    if cv_img is None:
+        print(f"Error: Could not load image at {test_img_path}")
+    else:
+        try:
+            # 3. Simulate converting CV2 image to ROS Image message
+            ros_image_msg = bridge.cv2_to_imgmsg(cv_img, "bgr8")
+            print("Successfully simulated ROS Image message.")
 
-        clue_ans = []
+            # 4. Convert it back to CV2 format (as your read_clueboard function expects a CV array)
+            # This mimics how your subscriber callback would receive and process the data
+            input_frame = bridge.imgmsg_to_cv2(ros_image_msg, "bgr8")
 
-        for let_img in clue_letters_img:
-            print("yay")
+            # 5. Run the detection pipeline
+            start_time = time.time()
+            clue_text = read_clueboard_8(input_frame)
+            end_time = time.time()
 
-            input_tensor = np.expand_dims(let_img, axis=(0,-1)).astype(np.float32)
-            interpreter.set_tensor(input_details[0]['index'], input_tensor)
-            interpreter.invoke()
-            output_data = interpreter.get_tensor(output_details[0]['index'])
-            clue_ans.append(one_hot_to_char(output_data[0]))
-        
-        end = time.perf_counter()
-        print(f"Elapsed time: {end - start:.6f} seconds")
+            # 6. Output results
+            print("-" * 30)
+            print(f"Detected Clue: {clue_text}")
+            print(f"Inference time: {end_time - start_time:.4f} seconds")
+            print("-" * 30)
 
-        print(''.join(clue_ans))
-        time.sleep(10)
-
-        
-
+        except Exception as e:
+            print(f"An error occurred during processing: {e}")
