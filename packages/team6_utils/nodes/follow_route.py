@@ -183,7 +183,7 @@ if __name__ == "__main__":
     if GOTO_TUNNEL:
         fly_to_tunnel(ctrl, end_height_above=1)
         ctrl.zero_force(with_offset=False) # Fall onto the tunnel
-        rospy.sleep(1)
+        rospy.sleep(0.8)
         ctrl.zero_force(with_offset=True)
 
 
